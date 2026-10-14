@@ -40,7 +40,15 @@ def option_value(block, name):
 
 
 def rewrite_base_url(block, new_url):
-    return re.sub(r'("base_url":")([^"]*)(")', lambda m: m.group(1) + new_url + m.group(3), block)
+    """把 extraFields 里的 base_url 换掉（兼容转义形式 &quot; 与原始引号两种写法）。"""
+    out = re.sub(r'(&quot;base_url&quot;:&quot;)([^&]*)(&quot;)',
+                 lambda m: m.group(1) + new_url + m.group(3), block)
+    return re.sub(r'("base_url":")([^"]*)(")', lambda m: m.group(1) + new_url + m.group(3), out)
+
+
+def read_base_url(block):
+    m = re.search(r'base_url&quot;:&quot;([^&]*)', block) or re.search(r'"base_url":"([^"]*)"', block)
+    return m.group(1) if m else None
 
 
 def main():
@@ -69,9 +77,10 @@ def main():
         return
 
     models = [a for a in sys.argv[1:] if not a.startswith('-')]
-    if len(models) < 2:
-        raise SystemExit('usage: python prep-proxy-test.py <model-keep-type> <model-change-type>')
-    keep_type, change_type = models[0], models[1]
+    if not models:
+        raise SystemExit('usage: python prep-proxy-test.py <model> [<model-change-type>]')
+    keep_type = models[0]
+    change_type = models[1] if len(models) > 1 else None
 
     if not os.path.exists(BAK):
         shutil.copy2(XML, BAK)
@@ -87,10 +96,14 @@ def main():
         if key not in (keep_type, change_type):
             continue
         m = re.search(r'"base_url":"([^"]*)"', part)
-        saved[key] = {'base_url': m.group(1) if m else None,
-                      'byokTypeKey': option_value(part, 'byokTypeKey')}
+        old = read_base_url(part)
+        if key in saved and saved[key].get('base_url') == PROXY:
+            # 已经改过一次（sidecar 里已有原始值），不要把它覆盖成代理地址
+            pass
+        else:
+            saved[key] = {'base_url': old, 'byokTypeKey': option_value(part, 'byokTypeKey')}
         part = rewrite_base_url(part, PROXY)
-        if key == change_type and saved[key]['byokTypeKey']:
+        if change_type and key == change_type and saved[key]['byokTypeKey']:
             part = re.sub(r'<option name="byokTypeKey" value="[^"]*" />',
                           '<option name="byokTypeKey" value="openai-compatible" />', part)
         parts[i] = part
@@ -101,7 +114,10 @@ def main():
     open(XML, 'w', encoding='utf-8', newline='').write(''.join(parts))
     json.dump(saved, open(SIDE, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     print('patched:', ', '.join(touched), '-> base_url =', PROXY)
-    print('now start IDEA and send an image with %s first, then with %s' % (keep_type, change_type))
+    if change_type:
+        print('now start IDEA and send an image with %s first, then with %s' % (keep_type, change_type))
+    else:
+        print('now start IDEA and send an image with %s' % keep_type)
 
 
 if __name__ == '__main__':

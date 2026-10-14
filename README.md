@@ -123,9 +123,15 @@ The following images were provided by the user and saved to the workspace for fu
 3. 反汇编确认服务端判定函数为 `cosy/agent/handlers.validateModelSupportForVl`（读取 `ai-coding/custom-model` 的
    `is_vl`，结构体偏移 `0x78`；为假时记录 `custom model does not support vision` 并丢弃图片）；
    另一处 `cosy/chat/util.PrepareModelConfig` 会把 `is_vl` 复制进本次模型配置。
-4. 下游中转站本身**支持**图片：直接调用可正确识别测试图内容，排除第三方 API 的问题。
-5. 怀疑点：自定义模型下发的 `format=openai-responses` 是服务端**不认识**的取值（服务端二进制里没有该字符串，
-   只认 `openai` 那一套；内置 BYOK 模型下发的是空值，服务端默认成 `openai`）。
+4. 下游中转站本身**支持**图片：直接调用（含 `image_url` 多模态内容）可正确识别测试图内容，排除第三方 API 的问题。
+5. 已排除 `format`：把模型类型改成「OpenAI 兼容」（下发 `format:"openai"`，即服务端认识的取值）后，
+   图片**仍然**进不去模型（模型回复"我用 Read 工具看不了图片文件"）。
+6. 抓包结论：**本地服务端并不使用客户端下发的 `url` 去完成模型调用**。做法是把 `url` 指向本地抓包代理
+   （`_patch/tools/proxy.py`，只记录并转发）、并杀掉旧服务端进程以清掉内存缓存后重试：
+   客户端日志确认下发的就是代理地址，但代理**一个 TCP 连接都没收到**，而聊天照常在数秒内得到回答。
+   结合"图片会被上传到 `*.oss-*.aliyuncs.com` 云存储"的现象，推测模型调用（以及是否给未注册的自定义模型附带图片）
+   实际由 Qoder 云端决定，插件侧无法左右 —— 因此多模态开关当前只是 UI 层能力，图片不会被真正附带。
+7. 排查工具都留在 `_patch/tools/` 下（本地抓包代理、模型地址临时改写/还原、连接监视器），方便以后有新思路时继续。
 
 排查工具已随仓库提供：`_patch/tools/proxy.py`（本地抓包代理，转发到真实中转站并记录服务端→模型的原始请求）
 + `_patch/tools/prep-proxy-test.py`（把指定模型的 Base URL 临时指向代理）。
