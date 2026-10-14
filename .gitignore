@@ -1,0 +1,17 @@
+# 本仓库只放补丁源码 / 脚本 / 文档，不放二进制：
+#   qoder-jetbrains/lib/*               官方插件自带的 jar（含 265MB 的 product jar）+ 构建出的补丁 jar
+#   _patch/backup/*.bak                 原始核心 jar（重建时用你自己插件目录里的那份）
+#   _patch/dist/                        构建产物
+qoder-jetbrains/lib/
+_patch/backup/
+_patch/dist/
+
+# 构建 / 测试中间产物
+_patch/classes/
+_patch/tools-classes/
+_patch/work/
+
+# 临时文件
+*.log
+*.tmp
+__pycache__/
